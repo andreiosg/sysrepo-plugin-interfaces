@@ -783,7 +783,6 @@ static int delete_static_route_value(char *xpath, char *node_name, int family)
 		} else if (!strcmp(node_name, "outgoing-interface")) {
 		}
 	} else if (!strcmp(node_name, "destination-prefix")) {
-		printf("delete\n");
 		route_list->delete = true;
 	} else if (!strcmp(node_name, "description")) {
 		set_static_route_description(route_list, NULL);
@@ -1219,6 +1218,7 @@ static int routing_oper_get_rib_routes_cb(sr_session_ctx_t *session, uint32_t su
 	char value_buffer[PATH_MAX];
 	char ip_buffer[INET6_ADDRSTRLEN];
 	char prefix_buffer[INET6_ADDRSTRLEN + 1 + 3];
+	char xpath_buffer[256] = {0};
 
 	ly_ctx = sr_get_context(sr_session_get_connection(session));
 
@@ -1357,15 +1357,21 @@ static int routing_oper_get_rib_routes_cb(sr_session_ctx_t *session, uint32_t su
 						break;
 					case route_next_hop_kind_list: {
 						const struct route_next_hop_list *NEXTHOP_LIST = &ROUTE->next_hop.value.list;
-						ly_err = lyd_new_path(nh_node, ly_ctx, "next-hop-list/next-hop", NULL, 0, &nh_list_node);
-						if (ly_err != LY_SUCCESS) {
-							SRP_LOG_ERR("unable to create new next-hop-list/next-hop node");
-							goto error_out;
-						}
 
 						for (size_t k = 0; k < NEXTHOP_LIST->size; k++) {
 							struct rtnl_link *iface = rtnl_link_get(link_cache, NEXTHOP_LIST->list[k].ifindex);
 							const char *if_name = rtnl_link_get_name(iface);
+
+							error = snprintf(xpath_buffer, sizeof(xpath_buffer), "next-hop/next-hop-list/next-hop[index=%d]", NEXTHOP_LIST->list[k].ifindex);
+							if (error < 0) {
+								SRP_LOG_ERR("unable to create new next-hop-list/next-hop node, couldn't retrieve interface index");
+								goto error_out;
+							}
+							ly_err = lyd_new_path(nh_node, ly_ctx, xpath_buffer, NULL, 0, &nh_list_node);
+							if (ly_err != LY_SUCCESS) {
+								SRP_LOG_ERR("unable to create new next-hop-list/next-hop node");
+								goto error_out;
+							}
 
 							// outgoing-interface
 							SRP_LOG_DBG("outgoing-interface = %s", if_name);
@@ -1789,6 +1795,7 @@ static int routing_load_control_plane_protocols(sr_session_ctx_t *session, struc
 	char ip_buffer[INET6_ADDRSTRLEN] = {0};
 	char prefix_buffer[INET6_ADDRSTRLEN + 1 + 3] = {0};
 	char route_path_buffer[PATH_MAX] = {0};
+	char xpath_buffer[256] = {0};
 
 	// control-plane-protocol structs
 	struct control_plane_protocol cpp_map[ROUTING_PROTOS_COUNT] = {0};
@@ -1931,12 +1938,20 @@ static int routing_load_control_plane_protocols(sr_session_ctx_t *session, struc
 							break;
 						case route_next_hop_kind_list: {
 							const struct route_next_hop_list *NEXTHOP_LIST = &ROUTE->next_hop.value.list;
-							ly_err = lyd_new_any(nh_node, ly_uv4mod, "next-hop-list/next-hop", NULL, true, LYD_ANYDATA_STRING, false, &nh_list_node);
-							if (ly_err != LY_SUCCESS) {
-								SRP_LOG_ERR("unable to create new next-hop-list/next-hop list for the node %s", route_path_buffer);
-								goto error_out;
-							}
 							for (size_t k = 0; k < NEXTHOP_LIST->size; k++) {
+
+								error = snprintf(xpath_buffer, sizeof(xpath_buffer), "next-hop/next-hop-list]/next-hop[index=%d]", NEXTHOP_LIST->list[k].ifindex);
+								if (error < 0) {
+									SRP_LOG_ERR("unable to create new next-hop-list/next-hop node, couldn't retrieve interface index");
+									goto error_out;
+								}
+
+								ly_err = lyd_new_any(nh_node, ly_uv4mod, xpath_buffer, NULL, true, LYD_ANYDATA_STRING, false, &nh_list_node);
+								if (ly_err != LY_SUCCESS) {
+									SRP_LOG_ERR("unable to create new next-hop-list/next-hop list for the node %s", route_path_buffer);
+									SRP_LOG_ERR("ly err = %d", ly_err);
+									goto error_out;
+								}
 								// next-hop-address
 								if (NEXTHOP_LIST->list[k].addr) {
 									nl_addr2str(NEXTHOP_LIST->list[k].addr, ip_buffer, sizeof(ip_buffer));
@@ -2020,12 +2035,18 @@ static int routing_load_control_plane_protocols(sr_session_ctx_t *session, struc
 							break;
 						case route_next_hop_kind_list: {
 							const struct route_next_hop_list *NEXTHOP_LIST = &ROUTE->next_hop.value.list;
-							ly_err = lyd_new_any(nh_node, ly_uv6mod, "next-hop-list/next-hop", NULL, true, LYD_ANYDATA_STRING, false, &nh_list_node);
-							if (ly_err != LY_SUCCESS) {
-								SRP_LOG_ERR("unable to create new next-hop-list/next-hop list for the node %s", route_path_buffer);
-								goto error_out;
-							}
 							for (size_t k = 0; k < NEXTHOP_LIST->size; k++) {
+								error = snprintf(xpath_buffer, sizeof(xpath_buffer), "next-hop/next-hop-list/next-hop[index=%d]", NEXTHOP_LIST->list[k].ifindex);
+								if (error < 0) {
+									SRP_LOG_ERR("unable to create new next-hop-list/next-hop node, couldn't retrieve interface index");
+									goto error_out;
+								}
+
+								ly_err = lyd_new_any(nh_node, ly_uv6mod, xpath_buffer, NULL, true, LYD_ANYDATA_STRING, false, &nh_list_node);
+								if (ly_err != LY_SUCCESS) {
+									SRP_LOG_ERR("unable to create new next-hop-list/next-hop list for the node %s", route_path_buffer);
+									goto error_out;
+								}
 								// next-hop-address
 								if (NEXTHOP_LIST->list[k].addr) {
 									nl_addr2str(NEXTHOP_LIST->list[k].addr, ip_buffer, sizeof(ip_buffer));

@@ -36,10 +36,10 @@ void route_next_hop_add_list(struct route_next_hop *nh, int ifindex, const char 
 	if (nh->kind == route_next_hop_kind_none) {
 		// initialize the list
 		nh->kind = route_next_hop_kind_list;
-		nh->value.list.list = xmalloc(sizeof(int));
+		nh->value.list.list = xmalloc(sizeof(struct route_next_hop_simple));
 		idx = 0;
 	} else {
-		nh->value.list.list = xrealloc(nh->value.list.list, sizeof(int) * (unsigned long) (nh->value.list.size + 1));
+		nh->value.list.list = xrealloc(nh->value.list.list, sizeof(struct route_next_hop_simple) * (unsigned long) (nh->value.list.size + 1));
 		idx = nh->value.list.size;
 	}
 	nh->value.list.list[idx].ifindex = ifindex;
