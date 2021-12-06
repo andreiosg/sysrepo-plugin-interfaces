@@ -87,7 +87,8 @@ static int routing_rib_set_address_family(const char *name, const char *address_
 static int routing_rib_set_description(const char *name, const char *description);
 
 // operational callbacks
-static int routing_state_data_cb(sr_session_ctx_t *session, uint32_t subscription_id, const char *module_name, const char *path, const char *request_xpath, uint32_t request_id, struct lyd_node **parent, void *private_data);
+static int routing_oper_get_rib_routes_cb(sr_session_ctx_t *session, uint32_t subscription_id, const char *module_name, const char *path, const char *request_xpath, uint32_t request_id, struct lyd_node **parent, void *private_data);
+static int routing_oper_get_interfaces_cb(sr_session_ctx_t *session, uint32_t subscription_id, const char *module_name, const char *path, const char *request_xpath, uint32_t request_id, struct lyd_node **parent, void *private_data);
 
 // rpc callbacks
 static int routing_rpc_active_route_cb(sr_session_ctx_t *session, uint32_t subscription_id, const char *xpath, const sr_val_t *input, const size_t input_cnt, sr_event_t event, uint32_t request_id, sr_val_t **output, size_t *output_cnt, void *private_data);
@@ -162,7 +163,14 @@ int sr_plugin_init_cb(sr_session_ctx_t *session, void **private_data)
 	SRP_LOG_INF("subscribing to interfaces operational data");
 
 	// interface leaf-list oper data
-	error = sr_oper_get_items_subscribe(session, BASE_YANG_MODEL, "/" BASE_YANG_MODEL ":routing/*", routing_state_data_cb, NULL, SR_SUBSCR_CTX_REUSE, &subscription);
+       error = sr_oper_get_items_subscribe(session, BASE_YANG_MODEL, ROUTING_INTERFACE_LEAF_LIST_YANG_PATH, routing_oper_get_interfaces_cb, NULL, SR_SUBSCR_CTX_REUSE, &subscription);
+       if (error) {
+               SRP_LOG_ERR("sr_oper_get_items_subscribe error (%d): %s", error, sr_strerror(error));
+               goto error_out;
+       }
+
+       // RIB oper data
+       error = sr_oper_get_items_subscribe(session, BASE_YANG_MODEL, ROUTING_RIB_LIST_YANG_PATH, routing_oper_get_rib_routes_cb, NULL, SR_SUBSCR_CTX_REUSE, &subscription);
 	if (error) {
 		SRP_LOG_ERR("sr_oper_get_items_subscribe error (%d): %s", error, sr_strerror(error));
 		goto error_out;
@@ -1079,11 +1087,6 @@ static char *routing_xpath_get(const struct lyd_node *node)
 	} else {
 		return lyd_path(node, LYD_PATH_STD, NULL, 0);
 	}
-}
-
-static int routing_state_data_cb(sr_session_ctx_t *session, uint32_t subscription_id, const char *module_name, const char *path, const char *request_xpath, uint32_t request_id, struct lyd_node **parent, void *private_data)
-{
-	return 0;
 }
 
 static int routing_oper_get_interfaces_cb(sr_session_ctx_t *session, uint32_t subscription_id, const char *module_name, const char *path, const char *request_xpath, uint32_t request_id, struct lyd_node **parent, void *private_data)
